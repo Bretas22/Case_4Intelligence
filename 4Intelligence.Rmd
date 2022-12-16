@@ -1,0 +1,398 @@
+---
+title: "Case do Mercado de Combustíveis"
+author: "Luana Cerqueira Bretas"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Introdução
+
+Este relatório tem como objetivo realizar uma análise sobre a venda de combustíveis no território brasileiro, respondendo às perguntas propostas pela equipe da 4Intelligence para seu Processo Seletivo Nov/2022 de estágio em Data Science. Os dados disponibilizados aos candidatos são divulgados pela Agência Nacional do Petróleo (ANP), relativos à venda de combustíveis por estado e tipo de combustível (etanol, gasolina e diesel), na frequência mensal, medida em metros cúbicos.
+
+```{r pacotes, echo=FALSE}
+# Carregar pacotes
+library(readxl)  
+library(dplyr)
+library(lubridate)
+library(tidyr)
+library(readr)
+library(magrittr) 
+library(dygraphs)
+library(ggplot2)
+```
+
+```{r utils, echo=FALSE}
+# Função para importar dados do Excel com várias planilhas 
+data_allsheets <- function(filename, tibble = FALSE) {
+  sheets <- readxl::excel_sheets(filename)
+  x <- lapply(sheets, function(X) readxl::read_excel(filename, sheet = X))
+  names(x) <- sheets
+  x
+  }
+
+# Texto para fonte nos gráficos
+footnote <- "Fonte: Elaborada pela autora com dados da ANP disponibilizados pela 4Intelligence."
+```
+
+```{r dados, echo = FALSE, warning = FALSE, message = FALSE}
+# Importando Dados --------------------------------------------------------
+dados <- data_allsheets(
+  "dados_desafiodatascientistintern_vendas_distribuidoras_anp.xlsx"
+  )
+
+# Tratando Dados ----------------------------------------------------------
+diesel <- dados$diesel %>% 
+  tidyr::pivot_longer(
+    cols = 3:23,
+    names_to  = "ano",       
+    values_to = "valor"
+  ) %>%
+  dplyr::mutate(ano = as.numeric(ano)) %>% 
+  tidyr::pivot_wider(
+    names_from = "regiao",
+    values_from = "valor"
+  ) %>% 
+  dplyr::group_by(ano) %>% 
+  summarise(
+    df = sum(df), 
+    go = sum(go),
+    ma = sum(ma),
+    mt = sum(mt),
+    mg = sum(mg),
+    pa = sum(pa),
+    sp = sum(sp),
+    to = sum(to),
+    br = sum(br)
+    )
+
+gasolina <- dados$gasolina %>% 
+  tidyr::pivot_longer(
+    cols = 3:23,
+    names_to  = "ano",       
+    values_to = "valor"
+  ) %>%
+  dplyr::mutate(ano = as.numeric(ano)) %>% 
+  tidyr::pivot_wider(
+    names_from = "regiao",
+    values_from = "valor"
+  ) %>% 
+  dplyr::group_by(ano) %>% 
+  summarise(
+    df = sum(df), 
+    go = sum(go),
+    ma = sum(ma),
+    mt = sum(mt),
+    mg = sum(mg),
+    pa = sum(pa),
+    sp = sum(sp),
+    to = sum(to),
+    br = sum(br)
+    )
+
+etanol <- dados$etanol %>% 
+  tidyr::pivot_longer(
+    cols = 3:23,
+    names_to  = "ano",       
+    values_to = "valor"
+  ) %>%
+  dplyr::mutate(ano = as.numeric(ano)) %>% 
+  tidyr::pivot_wider(
+    names_from = "regiao",
+    values_from = "valor"
+  ) %>% 
+  dplyr::group_by(ano) %>% 
+  summarise(
+    df = sum(df), 
+    go = sum(go),
+    ma = sum(ma),
+    mt = sum(mt),
+    mg = sum(mg),
+    pa = sum(pa),
+    sp = sum(sp),
+    to = sum(to),
+    br = sum(br)
+    )
+
+# Transformando dados em série temporal
+diesel_ts <- diesel %>% 
+  dplyr::select(-c(br,ano)) %>% 
+  ts(start = 2000, end = 2020, frequency = 12)
+
+gasolina_ts <- gasolina%>% 
+  dplyr::select(-c(br,ano)) %>% 
+  ts(start = 2000, end = 2020, frequency = 12)
+
+etanol_ts <- etanol%>% 
+  dplyr::select(-c(br,ano)) %>% 
+  ts(start = 2000, end = 2020, frequency = 12)
+```
+
+## Visualização de Sazonalidade
+
+Ao analisar o gráfico da série temporal da venda de cada combustível é notável a presença de sazonalidade, caracterizada por picos e vales de duração de 2 trimestres. 
+
+É observado o mesmo padrão para todos os estados.
+
+```{r sazonalidade, echo = FALSE}
+plot(diesel_ts,
+     main = "Venda de Diesel por Estado - Metros Cúbicos",
+     ylab = "",
+     xlab = "")
+
+plot(gasolina_ts,
+     main = "Venda de Gasolina por Estado - Metros Cúbicos",
+     ylab = "",
+     xlab = "")
+
+plot(etanol_ts,
+     main = "Venda de Etanol por Estado - Metros Cúbicos",
+     ylab = "",
+     xlab = "")
+```
+
+```{r sazonalidade dygraphs, echo = FALSE, warning = FALSE, message = FALSE}
+dygraphs::dygraph(
+  diesel_ts,
+  main = "Venda de Diesel por Estado - Metros Cúbicos"
+  ) %>%
+  dygraphs::dyRangeSelector()
+
+dygraphs::dygraph(
+  gasolina_ts,
+  main = "Venda de Gasolina por Estado - Metros Cúbicos"
+  ) %>%
+  dygraphs::dyRangeSelector() 
+
+dygraphs::dygraph(
+  etanol_ts,
+  main = "Venda de Etanol por Estado - Metros Cúbicos"
+  ) %>%
+  dygraphs::dyRangeSelector() 
+
+```
+
+Infelizmente o gráfico Dygrapgh não rodou no link renderizado pelo Rmarkdown, mas ele funciona perfeitamente no R. Favor rodar o código antes de gerar o arquivo para melhor visualização da sazonalidade, na aba Views.
+
+## Como o consumo de cada tipo de combustível está distribuído entre os estados brasileiros?
+
+O consumo de diesel entre os estados presentes na base de dados tem uma maior proporção em São Paulo, seguido de Minas Gerais e Mato Grosso. No início da série, em 2000, SP representava 24,2% das vendas no Brasil e em 2020 esse número abaixou para 21%. Minas Gerais ficou em média com 12% do mercado na série histórica. Mato Grosso tinha 4,6% das vendas em 2000 e terminou 2020 com 5,5%. Os estados com menor quantidade consumida são Tocantins, Distrito Federal e Maranhão, que juntos representaram 5% do mercado em 2020. Contanto, a soma do consumo dos outros estados supera ao do estado de São Paulo, uma vez que foram omitidos 19 estados da base de dados. Todos eles somados representavam 48,3% do mercado em 2000 e em 2020 ficaram com uma fatia de 46,5%.
+
+A maior concentração do consumo de gasolina tem o mesmo padrão do consumo de diesel, com SP e MG sendo os estados com maior proporção de vendas. Em 2000, suas participações no mercado foram de 32,8% e 10,3%, caindo para 20% e 9% em 2020, respectivamente. O estado com menor consumo de gasolina é o Tocantins, que não chegou a representar nem 1% do mercado na série histórica representada. Em 2000, após TO vieram Mato Grosso e Pará, sendo que a participação de MT permaneceu estável de 1,3% para 1,4% enquanto Pará obteve um crescimento de vendas de 1,6% para 3,4% em 2020, superando os estados do Maranhão, Goiás e o Distíto Federal. As vendas no conjunto dos estados ausentes da base de dados continua sendo superior, representando 46,8% do mercado em 2000 e 56,8% em 2020.
+
+O consumo de etanol por sua vez é maior no estado de São Paulo, mesmo considerando a soma de todos os outros estados. Em 2000, SP tinha 41,3% do mercado enquanto os outros tiveram 36,3%. Em 2020, o consumo de etanol em SP aumentou para 52,6%, mais da metade do mercado, enquanto a soma dos 19 estados ausentes da base representaram apenas 18,9%. Após São Paulo vieram Minas Gerais e Goiás, com 12% e 4% do consumo em 2000, crescendo para 14% e 8% em 2020, respectivamente. Os estados com menor consumo são Tocantis, Maranhão e Pará, todos com menos de 1% do mercado durante os ano analisados. O Distrito Federal possuia 3,2% do consumo de etanol em 2000 e em 2020 sua representatividade neste mercado caiu para 0,8%.
+
+
+```{r Distribuição entre os estados, echo=FALSE}
+# Diesel
+diesel %>% 
+  dplyr::select(-br) %>% 
+  tidyr::pivot_longer(
+    cols = 2:9,
+    names_to  = "estado",       
+    values_to = "valor"
+  ) %>% 
+  dplyr::group_by(ano) %>% 
+  summarise(valor_total = sum(valor)) %>% 
+  dplyr::mutate(diesel,
+    total  = valor_total,
+    outros = br - total) %>% 
+  dplyr::select(-c(valor_total, total, br)) %>% 
+  tidyr::pivot_longer(
+    cols = 2:10,
+    names_to  = "regiao",       
+    values_to = "valor"
+  ) %>% 
+  dplyr::mutate(regiao = toupper(regiao)) %>% 
+  ggplot2::ggplot() +
+  ggplot2::geom_col(aes(x = ano, y = valor, colour = regiao, fill = regiao)) +
+  ggplot2::scale_color_ordinal(aesthetics = c("colour", "fill")) +
+  ggplot2::theme(legend.position = "right") +
+  ggplot2::theme_minimal() +
+  ggplot2::theme(panel.grid = element_blank()) +
+  ggplot2::labs(
+    title    = "Vendas de Diesel por Estado",
+    subtitle = "Medidas em metros cúbicos",
+    y        = NULL,
+    x        = NULL,
+    colour   = NULL,
+    fill     = NULL,
+    caption  = footnote
+  )
+
+
+# Gasolina
+gasolina %>% 
+  dplyr::select(-br) %>% 
+  tidyr::pivot_longer(
+    cols = 2:9,
+    names_to  = "estado",       
+    values_to = "valor"
+  ) %>% 
+  dplyr::group_by(ano) %>% 
+  summarise(valor_total = sum(valor)) %>% 
+  dplyr::mutate(gasolina,
+                total  = valor_total,
+                outros = br - total) %>% 
+  dplyr::select(-c(valor_total, total, br)) %>% 
+  tidyr::pivot_longer(
+    cols = 2:10,
+    names_to  = "regiao",       
+    values_to = "valor"
+  ) %>% 
+  dplyr::mutate(regiao = toupper(regiao)) %>% 
+  ggplot2::ggplot() +
+  ggplot2::geom_col(aes(x = ano, y = valor, colour = regiao, fill = regiao)) +
+  ggplot2::scale_color_ordinal(aesthetics = c("colour", "fill")) +
+  ggplot2::theme(legend.position = "right") +
+  ggplot2::theme_minimal() +
+  ggplot2::theme(panel.grid = element_blank()) +
+  ggplot2::labs(
+    title    = "Vendas de Gasolina por Estado",
+    subtitle = "Medidas em metros cúbicos",
+    y        = NULL,
+    x        = NULL,
+    colour   = NULL,
+    fill     = NULL,
+    caption  = footnote
+  )
+
+# Etanol
+etanol %>% 
+  dplyr::select(-br) %>% 
+  tidyr::pivot_longer(
+    cols = 2:9,
+    names_to  = "estado",       
+    values_to = "valor"
+  ) %>% 
+  dplyr::group_by(ano) %>% 
+  summarise(valor_total = sum(valor)) %>% 
+  dplyr::mutate(etanol,
+                total  = valor_total,
+                outros = br - total) %>% 
+  dplyr::select(-c(valor_total, total, br)) %>% 
+  tidyr::pivot_longer(
+    cols = 2:10,
+    names_to  = "regiao",       
+    values_to = "valor"
+  ) %>% 
+  dplyr::mutate(regiao = toupper(regiao)) %>% 
+  ggplot2::ggplot() +
+  ggplot2::geom_col(aes(x = ano, y = valor, colour = regiao, fill = regiao)) +
+  ggplot2::scale_color_ordinal(aesthetics = c("colour", "fill")) +
+  ggplot2::theme(legend.position = "right") +
+  ggplot2::theme_minimal() +
+  ggplot2::theme(panel.grid = element_blank()) +
+  ggplot2::labs(
+    title    = "Vendas de Etanol por Estado",
+    subtitle = "Medidas em metros cúbicos",
+    y        = NULL,
+    x        = NULL,
+    colour   = NULL,
+    fill     = NULL,
+    caption  = footnote
+  ) 
+```
+
+## Qual o tamanho total do mercado e como ele evoluiu durante os últimos 5 anos?
+
+
+O volume total de diesel comercializado no Brasil no ano de 2020 foi de mais de 57 milhões de metros cúbicos vendidos. A taxa de crescimento anual composta nos últimos 5 anos foi 1,15%.
+
+O mercado brasileiro de gasolina no ano de 2020 teve um tamanho de mais de 35 milhões de metros cúbicos vendidos e apresentou um CAGR de -3,6% nos últimos 5 anos.
+
+Já as vendas de etanol no Brasil em 2020 foram de um total de mais de 19 milhões de metros cúbicos vendidos, sendo o menor mercado dentre os 3 tipos de combustíveis. Porém, o CAGR nos últimos 5 anos foi de 5,7%, nos mostrando que, mesmo sendo o menor, o mercado de etanol apresentou o maior crescimento nos últimos anos.
+
+O volume total de combustíveis comercializados no Brasil em 2020 foi de aproximadamente 112,5 milhões de metros cúbicos, com um CAGR de 0,12% nos últimos 5 anos.
+
+Vale ressaltar que, em relação a 2019, houve uma queda de -14,6 % no consumo de etanol e de -6,1% no consumo de gasolina, relativo ao período da pandemia. As vendas de diesel não sofreram queda, mas permaneceram estáveis.
+
+```{r}
+# Diesel
+diesel[17:21,] %>%
+  tidyr::pivot_longer(
+    cols = 10,
+    names_to  = "regiao",       
+    values_to = "valor"
+  ) %>% 
+  dplyr::mutate(regiao = toupper(regiao)) %>% 
+  ggplot2::ggplot() +
+  ggplot2::geom_col(aes(x = ano, y = valor, colour = regiao, fill = regiao)) +
+  ggplot2::geom_text(aes(x =ano,
+                         y = valor, 
+                         label = format(valor, big.mark = ".", decimal.mark = ","),
+                         hjust = 0.5, vjust = -0.5)) +
+  ggplot2::scale_color_manual(values = "#009c3b",aesthetics = c("colour", "fill")) +
+  ggplot2::theme(legend.position = "right") +
+  ggplot2::theme_minimal() +
+  ggplot2::theme(panel.grid = element_blank()) +
+  ggplot2::labs(
+    title    = "Vendas de Diesel no Brasil",
+    subtitle = "Medidas em metros cúbicos",
+    y        = NULL,
+    x        = NULL,
+    colour   = NULL,
+    fill     = NULL,
+    caption  = footnote
+  )  
+
+# Gasolina
+gasolina[17:21,] %>%
+  tidyr::pivot_longer(
+    cols = 10,
+    names_to  = "regiao",       
+    values_to = "valor"
+  ) %>% 
+  dplyr::mutate(regiao = toupper(regiao)) %>% 
+  ggplot2::ggplot() +
+  ggplot2::geom_col(aes(x = ano, y = valor, colour = regiao, fill = regiao)) +
+  ggplot2::geom_text(aes(x =ano,
+                         y = valor, 
+                         label = format(valor, big.mark = ".", decimal.mark = ","),
+                         hjust = 0.5, vjust = -0.5)) +
+  ggplot2::scale_color_manual(values = "#009c3b",aesthetics = c("colour", "fill")) +
+  ggplot2::theme(legend.position = "right") +
+  ggplot2::theme_minimal() +
+  ggplot2::theme(panel.grid = element_blank()) +
+  ggplot2::labs(
+    title    = "Vendas de Gasolina no Brasil",
+    subtitle = "Medidas em metros cúbicos",
+    y        = NULL,
+    x        = NULL,
+    colour   = NULL,
+    fill     = NULL,
+    caption  = footnote
+  )
+
+# Etanol
+etanol[17:21,] %>%
+  tidyr::pivot_longer(
+    cols = 10,
+    names_to  = "regiao",       
+    values_to = "valor"
+  ) %>% 
+  dplyr::mutate(regiao = toupper(regiao)) %>% 
+  ggplot2::ggplot() +
+  ggplot2::geom_col(aes(x = ano, y = valor, colour = regiao, fill = regiao)) +
+  ggplot2::geom_text(aes(x =ano,
+                         y = valor, 
+                         label = format(valor, big.mark = ".", decimal.mark = ","),
+                         hjust = 0.5, vjust = -0.5)) +
+  ggplot2::scale_color_manual(values = "#009c3b",aesthetics = c("colour", "fill")) +
+  ggplot2::theme(legend.position = "right") +
+  ggplot2::theme_minimal() +
+  ggplot2::theme(panel.grid = element_blank()) +
+  ggplot2::labs(
+    title    = "Vendas de Etanol no Brasil",
+    subtitle = "Medidas em metros cúbicos",
+    y        = NULL,
+    x        = NULL,
+    colour   = NULL,
+    fill     = NULL,
+    caption  = footnote
+  )
+
+```
+
